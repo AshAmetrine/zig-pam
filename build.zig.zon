@@ -1,0 +1,14 @@
+.{
+    .name = .zig_pam,
+    .version = "0.1.0",
+    .fingerprint = 0x59e7957386d5c1f9,
+    .dependencies = .{},
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "README.md",
+        "LICENSE",
+        "example",
+    },
+}
