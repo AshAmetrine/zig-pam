@@ -136,16 +136,44 @@ pub fn Pam(comptime T: type) type {
     return struct {
         const Self = @This();
 
-        pub const ConvFn = *const fn (
-            allocator: std.mem.Allocator,
-            msgs: Messages,
-            ctx: *T,
-        ) anyerror!void;
+        pub const ConvFn = if (T == void)
+            *const fn (
+                allocator: std.mem.Allocator,
+                msgs: Messages,
+            ) anyerror!void
+        else
+            *const fn (
+                allocator: std.mem.Allocator,
+                msgs: Messages,
+                ctx: *T,
+            ) anyerror!void;
 
-        pub const ConvState = struct {
-            ctx: *T,
-            conv: ConvFn,
-        };
+        pub const ConvState = if (T == void)
+            struct {
+                conv: ConvFn,
+
+                var empty_state: ConvState = .{ .conv = emptyConv };
+
+                /// Provides a conv which errors on prompt and ignores messages.
+                pub fn discardAll() *ConvState {
+                    return &empty_state;
+                }
+
+                fn emptyConv(_: std.mem.Allocator, msgs: Messages) !void {
+                    var it = msgs.iter();
+                    while (try it.next()) |msg| {
+                        switch (msg) {
+                            .prompt_echo_on, .prompt_echo_off => return error.PromptNotExpected,
+                            else => {},
+                        }
+                    }
+                }
+            }
+        else
+            struct {
+                ctx: *T,
+                conv: ConvFn,
+            };
 
         pub const Item = union(enum) {
             user: [:0]const u8,
@@ -340,14 +368,17 @@ pub fn Pam(comptime T: type) type {
                 .allocator = allocator,
             };
 
-            state.conv(allocator, messages, state.ctx) catch |err| {
-                responses.deinit();
-                return switch (err) {
-                    error.OutOfMemory => pam.PAM_BUF_ERR,
-                    error.Abort => pam.PAM_ABORT,
-                    else => pam.PAM_CONV_ERR,
+            if (T == void) {
+                state.conv(allocator, messages) catch |err| {
+                    responses.deinit();
+                    return convErrorToPam(err);
                 };
-            };
+            } else {
+                state.conv(allocator, messages, state.ctx) catch |err| {
+                    responses.deinit();
+                    return convErrorToPam(err);
+                };
+            }
 
             if (resp) |out| {
                 out.* = if (count == 0) null else responses.responses.ptr;
@@ -356,6 +387,14 @@ pub fn Pam(comptime T: type) type {
 
             responses.deinit();
             return pam.PAM_CONV_ERR;
+        }
+
+        fn convErrorToPam(err: anyerror) c_int {
+            return switch (err) {
+                error.OutOfMemory => pam.PAM_BUF_ERR,
+                error.Abort => pam.PAM_ABORT,
+                else => pam.PAM_CONV_ERR,
+            };
         }
     };
 }

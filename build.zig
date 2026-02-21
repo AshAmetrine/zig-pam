@@ -30,7 +30,7 @@ pub fn build(b: *std.Build) void {
     example_step.dependOn(&example.step);
     example_step.dependOn(&install_example.step);
 
-    const test_step = b.step("test", "Run all tests in all modes.");
+    const test_step = b.step("test", "Run unit tests");
     const tests = b.addTest(.{ .root_module = pam });
     const run_tests = b.addRunArtifact(tests);
     test_step.dependOn(&run_tests.step);
