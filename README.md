@@ -19,7 +19,7 @@ A Zig wrapper around the PAM (Pluggable Authentication Modules) C library (libpa
 Add the dependency with `zig fetch`:
 
 ```sh
-zig fetch --save git+https://github.com/Kawaii-Ash/zig-pam
+zig fetch --save git+https://github.com/ashametrine/zig-pam
 ```
 
 Then add it as an import in `build.zig`:
