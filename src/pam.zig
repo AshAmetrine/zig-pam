@@ -180,7 +180,7 @@ pub fn Pam(comptime T: type) type {
                 var empty_state: ConvState = .{ .conv = emptyConv };
 
                 /// Provides a conv which errors on prompt and ignores messages.
-                pub fn discardAll() *ConvState {
+                pub fn discardAll() *const ConvState {
                     return &empty_state;
                 }
 
@@ -208,12 +208,12 @@ pub fn Pam(comptime T: type) type {
             user_prompt: [:0]const u8,
             authtok: [:0]const u8,
             oldauthtok: [:0]const u8,
-            conv: *ConvState,
+            conv: *const ConvState,
         };
 
         pub const Opts = struct {
             service_name: []const u8,
-            state: *ConvState,
+            state: *const ConvState,
             user: ?[:0]const u8 = null,
         };
 
@@ -228,7 +228,7 @@ pub fn Pam(comptime T: type) type {
             // pam copies this into the pam handle
             const conv_def = pam.pam_conv{
                 .conv = convTrampoline,
-                .appdata_ptr = opts.state,
+                .appdata_ptr = @constCast(opts.state),
             };
 
             var handle: ?*pam.pam_handle = undefined;
@@ -308,7 +308,7 @@ pub fn Pam(comptime T: type) type {
                 .conv => blk: {
                     conv_def = pam.pam_conv{
                         .conv = convTrampoline,
-                        .appdata_ptr = item.conv,
+                        .appdata_ptr = @constCast(item.conv),
                     };
                     break :blk pam.PAM_CONV;
                 },
@@ -383,7 +383,7 @@ pub fn Pam(comptime T: type) type {
             appdata_ptr: ?*anyopaque,
         ) callconv(.c) c_int {
             const state_ptr = appdata_ptr orelse return pam.PAM_CONV_ERR;
-            const state: *ConvState = @ptrCast(@alignCast(state_ptr));
+            const state: *const ConvState = @ptrCast(@alignCast(state_ptr));
             if (num_msg < 0) return pam.PAM_CONV_ERR;
 
             const count: usize = @intCast(num_msg);

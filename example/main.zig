@@ -23,6 +23,7 @@ fn conv(allocator: std.mem.Allocator, msgs: pam.Messages, ctx: *AppState) anyerr
             .prompt_echo_on => |p| {
                 if (!ctx.termios.lflag.ECHO) {
                     ctx.termios.lflag.ECHO = true;
+                    ctx.termios.lflag.ECHONL = false;
                     try std.posix.tcsetattr(std.posix.STDIN_FILENO, .FLUSH, ctx.termios);
                 }
                 try out.print("{s}", .{p.message});
@@ -33,6 +34,7 @@ fn conv(allocator: std.mem.Allocator, msgs: pam.Messages, ctx: *AppState) anyerr
             .prompt_echo_off => |p| {
                 if (ctx.termios.lflag.ECHO) {
                     ctx.termios.lflag.ECHO = false;
+                    ctx.termios.lflag.ECHONL = true;
                     try std.posix.tcsetattr(std.posix.STDIN_FILENO, .FLUSH, ctx.termios);
                 }
                 try out.print("{s}", .{p.message});
@@ -73,21 +75,19 @@ pub fn main() !void {
     const user_z = try allocator.dupeZ(u8, username);
     defer allocator.free(user_z);
 
-    var termios = try std.posix.tcgetattr(std.posix.STDIN_FILENO);
+    const termios = try std.posix.tcgetattr(std.posix.STDIN_FILENO);
     defer {
-        termios.lflag.ECHO = true;
         std.posix.tcsetattr(std.posix.STDIN_FILENO, .FLUSH, termios) catch {};
     }
 
     var app = AppState{ .termios = termios };
-    var state = pam.Pam(AppState).ConvState{
-        .ctx = &app,
-        .conv = conv,
-    };
 
     var pam_client = try pam.Pam(AppState).init(allocator, .{
         .service_name = "login",
-        .state = &state,
+        .state = &.{
+            .ctx = &app,
+            .conv = conv,
+        },
         .user = user_z,
     });
     defer pam_client.deinit();
