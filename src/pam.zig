@@ -25,13 +25,37 @@ pub const SessionFlags = struct {
     silent: bool = false,
 };
 
+pub const ChangeAuthTokenFlags = struct {
+    silent: bool = false,
+    change_expired_authtok: bool = false,
+};
+
+fn pamMask(enabled: bool, flag: c_uint) c_uint {
+    return if (enabled) flag else 0;
+}
+
+fn pamSilentMask(enabled: bool) c_uint {
+    return pamMask(enabled, pam.PAM_SILENT);
+}
+
+fn pamFlagsToInt(mask: c_uint) c_int {
+    return @bitCast(mask);
+}
+
 fn authFlagsToInt(flags: AuthFlags) c_int {
-    return (if (flags.silent) @as(c_int, @intCast(pam.PAM_SILENT)) else 0) |
-        (if (flags.disallow_null_authtok) @as(c_int, @intCast(pam.PAM_DISALLOW_NULL_AUTHTOK)) else 0);
+    const mask = pamSilentMask(flags.silent) |
+        pamMask(flags.disallow_null_authtok, pam.PAM_DISALLOW_NULL_AUTHTOK);
+    return pamFlagsToInt(mask);
 }
 
 fn sessionFlagsToInt(flags: SessionFlags) c_int {
-    return if (flags.silent) @as(c_int, @intCast(pam.PAM_SILENT)) else 0;
+    return pamFlagsToInt(pamSilentMask(flags.silent));
+}
+
+fn changeAuthTokenFlagsToInt(flags: ChangeAuthTokenFlags) c_int {
+    const mask = pamSilentMask(flags.silent) |
+        pamMask(flags.change_expired_authtok, pam.PAM_CHANGE_EXPIRED_AUTHTOK);
+    return pamFlagsToInt(mask);
 }
 
 pub const Prompt = struct {
@@ -152,6 +176,7 @@ pub fn Pam(comptime T: type) type {
             struct {
                 conv: ConvFn,
 
+                /// Provides a conv which errors on prompt and ignores messages.
                 var empty_state: ConvState = .{ .conv = emptyConv };
 
                 /// Provides a conv which errors on prompt and ignores messages.
@@ -221,7 +246,6 @@ pub fn Pam(comptime T: type) type {
             };
         }
 
-
         pub fn deinit(self: *Self) void {
             if (self.handle == null) return;
             if (self.session_open) self.closeSession(.{ .silent = true }) catch {};
@@ -229,6 +253,11 @@ pub fn Pam(comptime T: type) type {
             _ = pam.pam_end(self.handle, self.status);
             self.env_arena.deinit();
             self.handle = null;
+        }
+
+        pub fn changeAuthToken(self: *Self, flags: ChangeAuthTokenFlags) PamError!void {
+            self.status = pam.pam_chauthtok(self.handle, changeAuthTokenFlagsToInt(flags));
+            if (self.status != pam.PAM_SUCCESS) return pamDiagnose(self.status);
         }
 
         pub fn authenticate(self: *Self, flags: AuthFlags) PamError!void {
@@ -243,7 +272,7 @@ pub fn Pam(comptime T: type) type {
 
         pub fn setCred(self: *Self, flags: CredFlags) PamError!void {
             const f = @intFromEnum(flags.action) |
-                (if (flags.silent) @as(c_int, @intCast(pam.PAM_SILENT)) else 0);
+                pamFlagsToInt(pamSilentMask(flags.silent));
             self.status = pam.pam_setcred(self.handle, f);
             if (self.status != pam.PAM_SUCCESS) return pamDiagnose(self.status);
 

@@ -56,7 +56,7 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
-    
+
     var stderr_buf: [256]u8 = undefined;
     var stderr_writer: std.fs.File.Writer = .init(std.fs.File.stderr(), &stderr_buf);
     const stderr = &stderr_writer.interface;
