@@ -4,6 +4,17 @@ pub const pam = @cImport({
     @cInclude("security/pam_appl.h");
 });
 
+fn pamFlagInt(flag: anytype) c_int {
+    return switch (@typeInfo(@TypeOf(flag))) {
+        .comptime_int => std.math.cast(c_int, flag) orelse @bitCast(@as(c_uint, flag)),
+        .int => |info| switch (info.signedness) {
+            .signed => flag,
+            .unsigned => @bitCast(flag),
+        },
+        else => @compileError("expected integer PAM flag"),
+    };
+}
+
 pub const CredAction = enum(c_int) {
     establish = pam.PAM_ESTABLISH_CRED,
     delete = pam.PAM_DELETE_CRED,
@@ -30,32 +41,26 @@ pub const ChangeAuthTokenFlags = struct {
     change_expired_authtok: bool = false,
 };
 
-fn pamMask(enabled: bool, flag: c_uint) c_uint {
-    return if (enabled) flag else 0;
+fn pamMask(enabled: bool, flag: anytype) c_int {
+    return if (enabled) pamFlagInt(flag) else 0;
 }
 
-fn pamSilentMask(enabled: bool) c_uint {
+fn pamSilentMask(enabled: bool) c_int {
     return pamMask(enabled, pam.PAM_SILENT);
 }
 
-fn pamFlagsToInt(mask: c_uint) c_int {
-    return @bitCast(mask);
-}
-
 fn authFlagsToInt(flags: AuthFlags) c_int {
-    const mask = pamSilentMask(flags.silent) |
+    return pamSilentMask(flags.silent) |
         pamMask(flags.disallow_null_authtok, pam.PAM_DISALLOW_NULL_AUTHTOK);
-    return pamFlagsToInt(mask);
 }
 
 fn sessionFlagsToInt(flags: SessionFlags) c_int {
-    return pamFlagsToInt(pamSilentMask(flags.silent));
+    return pamSilentMask(flags.silent);
 }
 
 fn changeAuthTokenFlagsToInt(flags: ChangeAuthTokenFlags) c_int {
-    const mask = pamSilentMask(flags.silent) |
+    return pamSilentMask(flags.silent) |
         pamMask(flags.change_expired_authtok, pam.PAM_CHANGE_EXPIRED_AUTHTOK);
-    return pamFlagsToInt(mask);
 }
 
 pub const Prompt = struct {
@@ -272,7 +277,7 @@ pub fn Pam(comptime T: type) type {
 
         pub fn setCred(self: *Self, flags: CredFlags) PamError!void {
             const f = @intFromEnum(flags.action) |
-                pamFlagsToInt(pamSilentMask(flags.silent));
+                pamSilentMask(flags.silent);
             self.status = pam.pam_setcred(self.handle, f);
             if (self.status != pam.PAM_SUCCESS) return pamDiagnose(self.status);
 
