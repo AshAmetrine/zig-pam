@@ -4,13 +4,22 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
     const target = b.standardTargetOptions(.{});
 
+    const translate_c = b.addTranslateC(.{
+        .root_source_file = b.path("src/c.h"),
+        .target = target,
+        .optimize = optimize,
+    });
+    translate_c.linkSystemLibrary("pam",.{});
+
     const pam = b.addModule("pam", .{
         .root_source_file = b.path("src/pam.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
+        .imports = &.{
+            .{ .name = "c", .module = translate_c.createModule() },
+        },
     });
-    pam.linkSystemLibrary("pam",.{});
 
     const example = b.addExecutable(.{
         .name = "example",

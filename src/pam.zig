@@ -1,8 +1,5 @@
 const std = @import("std");
-
-pub const pam = @cImport({
-    @cInclude("security/pam_appl.h");
-});
+pub const pam = @import("c");
 
 fn pamFlagInt(flag: anytype) c_int {
     return switch (@typeInfo(@TypeOf(flag))) {

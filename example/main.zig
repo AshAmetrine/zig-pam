@@ -3,6 +3,7 @@ const pam = @import("pam");
 
 const AppState = struct {
     termios: std.posix.termios,
+    io: std.Io,
 };
 
 fn conv(allocator: std.mem.Allocator, msgs: pam.Messages, ctx: *AppState) anyerror!void {
@@ -10,12 +11,12 @@ fn conv(allocator: std.mem.Allocator, msgs: pam.Messages, ctx: *AppState) anyerr
     var stdout_buf: [1024]u8 = undefined;
     var stderr_buf: [1024]u8 = undefined;
     var stdin_buf: [1024]u8 = undefined;
-    var stdout_writer: std.fs.File.Writer = .init(std.fs.File.stdout(), &stdout_buf);
-    var stderr_writer: std.fs.File.Writer = .init(std.fs.File.stderr(), &stderr_buf);
-    var stdin_reader: std.fs.File.Reader = .init(std.fs.File.stdin(), &stdin_buf);
-    const out = &stdout_writer.interface;
-    const err = &stderr_writer.interface;
-    const in = &stdin_reader.interface;
+    var stdout_writer = std.Io.File.stdout().writer(ctx.io, &stdout_buf);
+    var stderr_writer = std.Io.File.stderr().writer(ctx.io, &stderr_buf);
+    var stdin_reader = std.Io.File.stdin().reader(ctx.io, &stdin_buf);
+    const stdout = &stdout_writer.interface;
+    const stderr = &stderr_writer.interface;
+    const stdin = &stdin_reader.interface;
 
     var it = msgs.iter();
     while (try it.next()) |msg| {
@@ -26,10 +27,10 @@ fn conv(allocator: std.mem.Allocator, msgs: pam.Messages, ctx: *AppState) anyerr
                     ctx.termios.lflag.ECHONL = false;
                     try std.posix.tcsetattr(std.posix.STDIN_FILENO, .FLUSH, ctx.termios);
                 }
-                try out.print("{s}", .{p.message});
-                try out.flush();
-                const line = (try in.takeDelimiter('\n')) orelse return error.EndOfStream;
-                try p.respond(std.mem.trimRight(u8, line, "\r"));
+                try stdout.print("{s}", .{p.message});
+                try stdout.flush();
+                const input = (try stdin.takeDelimiter('\n')) orelse return error.EndOfStream;
+                try p.respond(input);
             },
             .prompt_echo_off => |p| {
                 if (ctx.termios.lflag.ECHO) {
@@ -37,36 +38,34 @@ fn conv(allocator: std.mem.Allocator, msgs: pam.Messages, ctx: *AppState) anyerr
                     ctx.termios.lflag.ECHONL = true;
                     try std.posix.tcsetattr(std.posix.STDIN_FILENO, .FLUSH, ctx.termios);
                 }
-                try out.print("{s}", .{p.message});
-                try out.flush();
-                const line = (try in.takeDelimiter('\n')) orelse return error.EndOfStream;
-                try p.respond(std.mem.trimRight(u8, line, "\r"));
+                try stdout.print("{s}", .{p.message});
+                try stdout.flush();
+                const input = (try stdin.takeDelimiter('\n')) orelse return error.EndOfStream;
+                try p.respond(input);
             },
             .text_info => |text| {
-                try out.print("{s}\n", .{text});
-                try out.flush();
+                try stdout.print("{s}\n", .{text});
+                try stdout.flush();
             },
             .error_msg => |text| {
-                try err.print("{s}\n", .{text});
-                try err.flush();
+                try stderr.print("{s}\n", .{text});
+                try stderr.flush();
             },
         }
     }
 }
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.gpa;
 
     var stderr_buf: [256]u8 = undefined;
-    var stderr_writer: std.fs.File.Writer = .init(std.fs.File.stderr(), &stderr_buf);
+    var stderr_writer = std.Io.File.stderr().writer(init.io, &stderr_buf);
     const stderr = &stderr_writer.interface;
 
-    var args = try std.process.argsWithAllocator(allocator);
-    defer args.deinit();
-    _ = args.next();
-    const username = args.next() orelse {
+    var args_it = init.minimal.args.iterate();
+    _ = args_it.skip();
+
+    const username = args_it.next() orelse {
         try stderr.print("usage: example <user>\n", .{});
         try stderr.flush();
         return;
@@ -80,7 +79,7 @@ pub fn main() !void {
         std.posix.tcsetattr(std.posix.STDIN_FILENO, .FLUSH, termios) catch {};
     }
 
-    var app = AppState{ .termios = termios };
+    var app = AppState{ .termios = termios, .io = init.io };
 
     var pam_client = try pam.Pam(AppState).init(allocator, .{
         .service_name = "login",
