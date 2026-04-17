@@ -341,7 +341,7 @@ pub fn Pam(comptime T: type) type {
             try self.putEnv(kv);
         }
 
-        pub fn addEnvListToMap(self: *Self, env_map: *std.process.EnvMap) !void {
+        pub fn addEnvListToMap(self: *Self, env_map: *std.process.Environ.Map) !void {
             const env_list = self.getEnvList();
             defer freeEnvList(env_list);
 
@@ -356,8 +356,8 @@ pub fn Pam(comptime T: type) type {
             }
         }
 
-        pub fn createEnvListMap(self: *Self) !std.process.EnvMap {
-            var env_map = std.process.EnvMap.init(self.allocator);
+        pub fn createEnvListMap(self: *Self) !std.process.Environ.Map {
+            var env_map = std.process.Environ.Map.init(self.allocator);
             errdefer env_map.deinit();
 
             try self.addEnvListToMap(&env_map);
