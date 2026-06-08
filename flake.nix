@@ -2,28 +2,47 @@
   description = "zig-pam flake";
 
   inputs = {
-    #nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+
+    zig-overlay = {
+      url = "github:mitchellh/zig-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    zls-flake = {
+      url = "github:zigtools/zls/0.16.0";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
-    { self, nixpkgs, ... }:
+    {
+      self,
+      nixpkgs,
+      zig-overlay,
+      zls-flake,
+      ...
+    }:
     let
       inherit (nixpkgs) lib;
-      forAllSystems = lib.genAttrs lib.systems.flakeExposed;
+      forAllSystems = lib.genAttrs (builtins.attrNames zig-overlay.packages);
     in
     {
       devShells = forAllSystems (
         system:
         let
           pkgs = import nixpkgs { inherit system; };
+
+          zig = zig-overlay.packages.${system}."0.16.0";
+          zls = zls-flake.packages.${system}.zls;
         in
         {
           default = pkgs.mkShell {
             name = "zig-pam-devshell";
-            packages = with pkgs; [
+            packages = [
               zig
               zls
-              linux-pam
+              pkgs.linux-pam
             ];
           };
         }
