@@ -71,7 +71,7 @@ pub fn main(init: std.process.Init) !void {
         return;
     };
 
-    const user_z = try allocator.dupeZ(u8, username);
+    const user_z = try allocator.dupeSentinel(u8, username, 0);
     defer allocator.free(user_z);
 
     const termios = try std.posix.tcgetattr(std.posix.STDIN_FILENO);

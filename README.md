@@ -10,7 +10,7 @@ A Zig wrapper around the PAM (Pluggable Authentication Modules) C library (libpa
 
 ## Requirements
 
-- Zig 0.16.0.
+- Zig 0.17.0.
 - `libc`.
 - `libpam`.
 

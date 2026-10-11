@@ -71,7 +71,7 @@ pub const Prompt = struct {
             std.crypto.secureZero(u8, p);
             self.allocator.free(p);
         }
-        self.response.resp = try self.allocator.dupeZ(u8, value);
+        self.response.resp = try self.allocator.dupeSentinel(u8, value, 0);
         self.response.resp_retcode = 0;
     }
 };
