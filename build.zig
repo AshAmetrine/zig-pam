@@ -25,18 +25,29 @@ pub fn build(b: *std.Build) void {
         },
     });
 
+    const docs = b.addObject(.{
+        .name = "pam",
+        .root_module = pam,
+    });
+    const install_docs = b.addInstallDirectory(.{
+        .source_dir = docs.getEmittedDocs(),
+        .install_dir = .prefix,
+        .install_subdir = "docs",
+    });
+    const docs_step = b.step("docs", "Generate API documentation");
+    docs_step.dependOn(&install_docs.step);
+
     const example = b.addExecutable(.{
         .name = "example",
         .root_module = b.createModule(.{
             .root_source_file = b.path("example/main.zig"),
             .target = target,
             .optimize = optimize,
-            .imports = &.{ 
+            .imports = &.{
                 .{ .name = "pam", .module = pam },
             },
         }),
     });
-
 
     const install_example = b.addInstallArtifact(example, .{});
     const example_step = b.step("example", "Build the example");
