@@ -66,12 +66,13 @@ pub const Prompt = struct {
     allocator: std.mem.Allocator,
 
     pub fn respond(self: *const Prompt, value: []const u8) !void {
+        const response = try self.allocator.dupeSentinel(u8, value, 0);
         if (self.response.resp) |existing| {
             const p = std.mem.span(existing);
             std.crypto.secureZero(u8, p);
             self.allocator.free(p);
         }
-        self.response.resp = try self.allocator.dupeSentinel(u8, value, 0);
+        self.response.resp = response;
         self.response.resp_retcode = 0;
     }
 };
