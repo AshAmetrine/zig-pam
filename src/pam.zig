@@ -214,7 +214,7 @@ pub fn Pam(comptime T: type) type {
         };
 
         pub const Opts = struct {
-            service_name: []const u8,
+            service_name: [:0]const u8,
             state: *const ConvState,
             user: ?[:0]const u8 = null,
         };
