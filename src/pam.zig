@@ -331,17 +331,15 @@ pub fn Pam(comptime T: type) type {
         }
 
         pub fn addEnvListToMap(self: *Self, env_map: *std.process.Environ.Map) !void {
-            const env_list = self.getEnvList();
+            const env_list = try self.getEnvList();
             defer freeEnvList(env_list);
 
-            if (env_list) |list| {
-                var i: usize = 0;
-                while (list[i]) |entry| : (i += 1) {
-                    const s = std.mem.span(entry);
-                    const eq = std.mem.indexOfScalar(u8, s, '=') orelse continue;
-                    if (eq == 0) continue;
-                    try env_map.put(s[0..eq], s[eq + 1 ..]);
-                }
+            var i: usize = 0;
+            while (env_list[i]) |entry| : (i += 1) {
+                const s = std.mem.span(entry);
+                const eq = std.mem.indexOfScalar(u8, s, '=') orelse continue;
+                if (eq == 0) continue;
+                try env_map.put(s[0..eq], s[eq + 1 ..]);
             }
         }
 
@@ -354,8 +352,8 @@ pub fn Pam(comptime T: type) type {
             return env_map;
         }
 
-        fn getEnvList(self: *Self) ?[*:null]?[*:0]u8 {
-            return pam.pam_getenvlist(self.handle);
+        fn getEnvList(self: *Self) ![*:null]?[*:0]u8 {
+            return pam.pam_getenvlist(self.handle) orelse return error.EnvironmentUnavailable;
         }
 
         fn freeEnvList(env_list: ?[*:null]?[*:0]u8) void {
