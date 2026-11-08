@@ -94,6 +94,7 @@ pub fn main(init: std.process.Init) !void {
     try pam_client.authenticate(.{});
     try pam_client.accountMgmt(.{});
 
-    try stderr.print("Authentication Succeeded\n", .{});
+    const user = try pam_client.getItem(.user) orelse return error.PamUserUnavailable;
+    try stderr.print("Authentication Succeeded for {s}\n", .{ user });
     try stderr.flush();
 }

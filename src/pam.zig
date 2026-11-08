@@ -179,7 +179,6 @@ pub fn Pam(comptime T: type) type {
             struct {
                 conv: ConvFn,
 
-                /// Provides a conv which errors on prompt and ignores messages.
                 var empty_state: ConvState = .{ .conv = emptyConv };
 
                 /// Provides a conv which errors on prompt and ignores messages.
@@ -203,15 +202,14 @@ pub fn Pam(comptime T: type) type {
                 conv: ConvFn,
             };
 
-        pub const Item = union(enum) {
-            user: [:0]const u8,
-            tty: [:0]const u8,
-            rhost: [:0]const u8,
-            ruser: [:0]const u8,
-            user_prompt: [:0]const u8,
-            authtok: [:0]const u8,
-            oldauthtok: [:0]const u8,
-            conv: *const ConvState,
+        pub const ItemType = enum(c_int) {
+            user = pam.PAM_USER,
+            tty = pam.PAM_TTY,
+            rhost = pam.PAM_RHOST,
+            ruser = pam.PAM_RUSER,
+            user_prompt = pam.PAM_USER_PROMPT,
+            authtok = pam.PAM_AUTHTOK,
+            oldauthtok = pam.PAM_OLDAUTHTOK,
         };
 
         pub const Opts = struct {
@@ -298,36 +296,26 @@ pub fn Pam(comptime T: type) type {
             self.session_open = false;
         }
 
-        pub fn setItem(self: *Self, item: Item) PamError!void {
-            var conv_def: pam.pam_conv = undefined;
-            const item_type: c_int = switch (item) {
-                .user => pam.PAM_USER,
-                .tty => pam.PAM_TTY,
-                .rhost => pam.PAM_RHOST,
-                .ruser => pam.PAM_RUSER,
-                .user_prompt => pam.PAM_USER_PROMPT,
-                .authtok => pam.PAM_AUTHTOK,
-                .oldauthtok => pam.PAM_OLDAUTHTOK,
-                .conv => blk: {
-                    conv_def = pam.pam_conv{
-                        .conv = convTrampoline,
-                        .appdata_ptr = @constCast(item.conv),
-                    };
-                    break :blk pam.PAM_CONV;
-                },
+        pub fn getItem(self: *Self, tag: ItemType) PamError!?[:0]const u8 {
+            var ptr: ?*const anyopaque = null;
+            self.status = pam.pam_get_item(self.handle, @backingInt(tag), &ptr);
+            if (self.status != pam.PAM_SUCCESS) return pamDiagnose(self.status);
+            const value: [*:0]const u8 = @ptrCast(ptr orelse return null);
+            return std.mem.span(value);
+        }
+
+        pub fn setItem(self: *Self, tag: ItemType, value: ?[:0]const u8) PamError!void {
+            const ptr = if (value) |v| v.ptr else null;
+            self.status = pam.pam_set_item(self.handle, @backingInt(tag), ptr);
+            if (self.status != pam.PAM_SUCCESS) return pamDiagnose(self.status);
+        }
+
+        pub fn setConversation(self: *Self, conv: *const ConvState) PamError!void {
+            const conv_def: pam.pam_conv = .{
+                .conv = convTrampoline,
+                .appdata_ptr = @constCast(conv),
             };
-            const ptr: ?*const anyopaque = switch (item) {
-                inline .user,
-                .tty,
-                .rhost,
-                .ruser,
-                .user_prompt,
-                .authtok,
-                .oldauthtok,
-                => |s| @ptrCast(s.ptr),
-                .conv => &conv_def,
-            };
-            self.status = pam.pam_set_item(self.handle, item_type, ptr);
+            self.status = pam.pam_set_item(self.handle, pam.PAM_CONV, &conv_def);
             if (self.status != pam.PAM_SUCCESS) return pamDiagnose(self.status);
         }
 

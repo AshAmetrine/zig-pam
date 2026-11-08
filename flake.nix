@@ -10,7 +10,7 @@
     };
 
     zls-flake = {
-      url = "github:zigtools/zls/0.16.0";
+      url = "github:zigtools/zls/0.17.0";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
