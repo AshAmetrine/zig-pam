@@ -221,7 +221,6 @@ pub fn Pam(comptime T: type) type {
         handle: ?*pam.pam_handle,
         status: c_int = pam.PAM_SUCCESS,
         allocator: std.mem.Allocator,
-        env_arena: std.heap.ArenaAllocator,
         session_open: bool = false,
         creds_established: bool = false,
 
@@ -243,7 +242,6 @@ pub fn Pam(comptime T: type) type {
                 .handle = handle,
                 .status = status,
                 .allocator = allocator,
-                .env_arena = std.heap.ArenaAllocator.init(allocator),
             };
         }
 
@@ -252,7 +250,6 @@ pub fn Pam(comptime T: type) type {
             if (self.session_open) self.closeSession(.{ .silent = true }) catch {};
             if (self.creds_established) self.setCred(.{ .action = .delete, .silent = true }) catch {};
             _ = pam.pam_end(self.handle, self.status);
-            self.env_arena.deinit();
             self.handle = null;
         }
 
@@ -326,7 +323,8 @@ pub fn Pam(comptime T: type) type {
 
         pub fn putEnvAlloc(self: *Self, key: []const u8, value: []const u8) !void {
             if (std.mem.indexOfScalar(u8, key, '=') != null) return error.InvalidPayload;
-            const kv = try std.fmt.allocPrintSentinel(self.env_arena.allocator(), "{s}={s}", .{ key, value }, 0);
+            const kv = try std.fmt.allocPrintSentinel(self.allocator, "{s}={s}", .{ key, value }, 0);
+            defer self.allocator.free(kv);
             try self.putEnv(kv);
         }
 
@@ -356,13 +354,12 @@ pub fn Pam(comptime T: type) type {
             return pam.pam_getenvlist(self.handle) orelse return error.EnvironmentUnavailable;
         }
 
-        fn freeEnvList(env_list: ?[*:null]?[*:0]u8) void {
-            const list = env_list orelse return;
+        fn freeEnvList(env_list: [*:null]?[*:0]u8) void {
             var i: usize = 0;
-            while (list[i]) |entry| : (i += 1) {
+            while (env_list[i]) |entry| : (i += 1) {
                 std.c.free(@ptrCast(entry));
             }
-            std.c.free(@ptrCast(list));
+            std.c.free(@ptrCast(env_list));
         }
 
         fn convTrampoline(
