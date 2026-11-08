@@ -250,7 +250,7 @@ pub fn Pam(comptime T: type) type {
         pub fn deinit(self: *Self) void {
             if (self.handle == null) return;
             if (self.session_open) self.closeSession(.{ .silent = true }) catch {};
-            if (self.creds_established) _ = pam.pam_setcred(self.handle, pam.PAM_DELETE_CRED);
+            if (self.creds_established) self.setCred(.{ .action = .delete, .silent = true }) catch {};
             _ = pam.pam_end(self.handle, self.status);
             self.env_arena.deinit();
             self.handle = null;
